@@ -5,7 +5,7 @@ import Navigation from './Navigation';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { supabase } from '../lib/supabase';
 import {
   AlertDialog,
@@ -85,7 +85,7 @@ export default function ProfilePage({ currentUser, onNavigate, onLogout }: Profi
     }
   };
 
-  const handleExportData = async () => {
+  const handleExportData = async (format: 'json' | 'csv' | 'excel') => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -107,16 +107,65 @@ export default function ProfilePage({ currentUser, onNavigate, onLogout }: Profi
         return;
       }
 
-      const dataStr = JSON.stringify(entries, null, 2);
-      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      let dataBlob: Blob;
+      let filename: string;
+
+      if (format === 'json') {
+        const dataStr = JSON.stringify(entries, null, 2);
+        dataBlob = new Blob([dataStr], { type: 'application/json' });
+        filename = `dreamtracker-backup-${new Date().toISOString().split('T')[0]}.json`;
+      } else if (format === 'csv') {
+        // Convert to CSV
+        const headers = ['Date', 'Title', 'Content', 'Sleep Hours', 'Sleep Quality', 'Caffeine Intake', 'Stress Level', 'Mood'];
+        const csvRows = [headers.join(',')];
+        
+        entries.forEach(entry => {
+          const row = [
+            new Date(entry.created_at || '').toLocaleDateString(),
+            `"${entry.title.replace(/"/g, '""')}"`,
+            `"${entry.content.replace(/"/g, '""')}"`,
+            entry.sleep_hours,
+            entry.sleep_quality,
+            entry.caffeine_intake,
+            entry.stress_level,
+            entry.mood || ''
+          ];
+          csvRows.push(row.join(','));
+        });
+        
+        dataBlob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+        filename = `dreamtracker-data-${new Date().toISOString().split('T')[0]}.csv`;
+      } else {
+        // Excel format (TSV for better Excel compatibility)
+        const headers = ['Date', 'Title', 'Content', 'Sleep Hours', 'Sleep Quality', 'Caffeine Intake', 'Stress Level', 'Mood'];
+        const tsvRows = [headers.join('\t')];
+        
+        entries.forEach(entry => {
+          const row = [
+            new Date(entry.created_at || '').toLocaleDateString(),
+            entry.title.replace(/\t/g, ' '),
+            entry.content.replace(/\t/g, ' '),
+            entry.sleep_hours,
+            entry.sleep_quality,
+            entry.caffeine_intake,
+            entry.stress_level,
+            entry.mood || ''
+          ];
+          tsvRows.push(row.join('\t'));
+        });
+        
+        dataBlob = new Blob([tsvRows.join('\n')], { type: 'application/vnd.ms-excel' });
+        filename = `dreamtracker-data-${new Date().toISOString().split('T')[0]}.xls`;
+      }
+
       const url = URL.createObjectURL(dataBlob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `dreamtracker-backup-${new Date().toISOString().split('T')[0]}.json`;
+      link.download = filename;
       link.click();
       URL.revokeObjectURL(url);
       
-      toast.success('Data exported successfully!');
+      toast.success(`Data exported successfully as ${format.toUpperCase()}!`);
     } catch (error: any) {
       toast.error(error.message || 'Failed to export data');
     }
@@ -154,7 +203,7 @@ export default function ProfilePage({ currentUser, onNavigate, onLogout }: Profi
         currentUser={currentUser}
       />
 
-      <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 pb-16">
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 pb-16">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -240,14 +289,35 @@ export default function ProfilePage({ currentUser, onNavigate, onLogout }: Profi
                     </p>
                   </div>
 
-                  <Button
-                    onClick={handleExportData}
-                    variant="outline"
-                    className="w-full border-white/20 text-white hover:bg-white/10 py-3 rounded-xl"
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Export All Data (JSON)
-                  </Button>
+                  <div className="space-y-2">
+                    <Label className="text-purple-100">Export Your Data</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <Button
+                        onClick={() => handleExportData('json')}
+                        variant="outline"
+                        className="border-white/20 text-white hover:bg-white/10 py-3 rounded-xl"
+                      >
+                        <Download className="w-4 h-4 mr-1" />
+                        JSON
+                      </Button>
+                      <Button
+                        onClick={() => handleExportData('csv')}
+                        variant="outline"
+                        className="border-white/20 text-white hover:bg-white/10 py-3 rounded-xl"
+                      >
+                        <Download className="w-4 h-4 mr-1" />
+                        CSV
+                      </Button>
+                      <Button
+                        onClick={() => handleExportData('excel')}
+                        variant="outline"
+                        className="border-white/20 text-white hover:bg-white/10 py-3 rounded-xl"
+                      >
+                        <Download className="w-4 h-4 mr-1" />
+                        Excel
+                      </Button>
+                    </div>
+                  </div>
 
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
